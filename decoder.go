@@ -1,9 +1,8 @@
 package bencode
 
 import (
-	"bytes"
-	"encoding/binary"
 	"io"
+	"strconv"
 )
 
 type Decoder struct {
@@ -29,7 +28,11 @@ func (d Decoder) decode() (interface{}, error) {
 		return nil, NoBytesReadError{}
 	}
 
-	switch b := d.buff[0]; b {
+	return d.decodeFrom(d.buff[0])
+}
+
+func (d Decoder) decodeFrom(b byte) (interface{}, error) {
+	switch b {
 	case 'i':
 		return d.decodeInt()
 	case 'l':
@@ -42,19 +45,67 @@ func (d Decoder) decode() (interface{}, error) {
 }
 
 func (d Decoder) decodeList() (interface{}, error) {
-	return nil, nil
-}
+	buff := make([]interface{}, 0)
 
-func (d Decoder) decodeInt() (int64, error) {
-	intBuff := make([]byte, 64)
+	processor := func(n int) (bool, error) {
+		for i := 0; i < n; i++ {
+			if read := d.buff[i]; read != 'e' {
+				decoded, err := d.decodeFrom(read)
 
-	offset := 0
+				if err != nil {
+					return false, err
+				}
+
+				buff = append(buff, decoded)
+			} else {
+				return false, nil
+			}
+		}
+
+		return true, nil
+	}
+
 	for {
 		n, err := d.r.Read(d.buff)
 
+		cont, err := processor(n)
+		if !cont {
+			break
+		}
+
+		if err == io.EOF {
+			break
+		} else if err != nil {
+			return nil, err
+		}
+	}
+
+	return buff, nil
+}
+
+func (d Decoder) decodeInt() (int, error) {
+	intBuff := make([]byte, 64)
+	offset := 0
+
+	processor := func(n int) bool {
 		for i := 0; i < n; i++ {
-			intBuff[offset] = d.buff[i]
-			offset++
+			if read := d.buff[i]; read != 'e' {
+				intBuff[offset] = read
+				offset++
+			} else {
+				return false
+			}
+		}
+
+		return true
+	}
+
+	for {
+		n, err := d.r.Read(d.buff)
+
+		cont := processor(n)
+		if !cont {
+			break
 		}
 
 		if err == io.EOF {
@@ -64,8 +115,7 @@ func (d Decoder) decodeInt() (int64, error) {
 		}
 	}
 
-	byteReader := bytes.NewBuffer(intBuff)
-	return binary.ReadVarint(byteReader)
+	return strconv.Atoi(string(intBuff[:offset]))
 }
 
 func (d Decoder) decodeDict() (interface{}, error) {
