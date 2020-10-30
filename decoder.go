@@ -6,32 +6,30 @@ import (
 )
 
 type Decoder struct {
-    r io.Reader
-
+    r    io.Reader
     buff []byte
 }
 
-type NoBytesReadError struct {
+func (d *Decoder) next() (byte, error) {
+    _, err := d.r.Read(d.buff)
+
+    if err != nil {
+        return 0, err
+    }
+
+    return d.buff[0], nil
 }
 
-func (err NoBytesReadError) Error() string {
-    return "could not read any bytes"
-}
-
-func (d Decoder) decode() (interface{}, error) {
-    n, err := d.r.Read(d.buff)
+func (d *Decoder) decode() (interface{}, error) {
+    next, err := d.next()
     if err != nil {
         return nil, err
     }
 
-    if n == 0 {
-        return nil, NoBytesReadError{}
-    }
-
-    return d.decodeFrom(d.buff[0])
+    return d.decodeByte(next)
 }
 
-func (d Decoder) decodeFrom(b byte) (interface{}, error) {
+func (d *Decoder) decodeByte(b byte) (interface{}, error) {
     switch b {
     case 'i':
         return d.decodeInt()
@@ -44,32 +42,21 @@ func (d Decoder) decodeFrom(b byte) (interface{}, error) {
     }
 }
 
-func (d Decoder) decodeList() (interface{}, error) {
+func (d *Decoder) decodeList() ([]interface{}, error) {
     buff := make([]interface{}, 0)
 
-    processor := func(n int) (bool, error) {
-        for i := 0; i < n; i++ {
-            if read := d.buff[i]; read != 'e' {
-                decoded, err := d.decodeFrom(read)
-
-                if err != nil {
-                    return false, err
-                }
-
-                buff = append(buff, decoded)
-            } else {
-                return false, nil
-            }
-        }
-
-        return true, nil
-    }
-
     for {
-        n, err := d.r.Read(d.buff)
+        next, err := d.next()
 
-        cont, err := processor(n)
-        if !cont {
+        if next != 'e' {
+            decoded, err := d.decodeByte(next)
+
+            if err != nil {
+                return nil, err
+            }
+
+            buff = append(buff, decoded)
+        } else {
             break
         }
 
@@ -83,28 +70,17 @@ func (d Decoder) decodeList() (interface{}, error) {
     return buff, nil
 }
 
-func (d Decoder) decodeInt() (int, error) {
+func (d *Decoder) decodeInt() (int, error) {
     intBuff := make([]byte, 64)
     offset := 0
 
-    processor := func(n int) bool {
-        for i := 0; i < n; i++ {
-            if read := d.buff[i]; read != 'e' {
-                intBuff[offset] = read
-                offset++
-            } else {
-                return false
-            }
-        }
-
-        return true
-    }
-
     for {
-        n, err := d.r.Read(d.buff)
+        next, err := d.next()
 
-        cont := processor(n)
-        if !cont {
+        if next != 'e' {
+            intBuff[offset] = next
+            offset++
+        } else {
             break
         }
 
@@ -118,16 +94,51 @@ func (d Decoder) decodeInt() (int, error) {
     return strconv.Atoi(string(intBuff[:offset]))
 }
 
-func (d Decoder) decodeDict() (interface{}, error) {
+func (d *Decoder) decodeString(b byte) (string, error) {
+    number := make([]byte, 1)
+    number[0] = b
+
+    for {
+        next, err := d.next()
+
+        if next == ':' {
+            break
+        } else {
+            number = append(number, next)
+        }
+
+        if err == io.EOF {
+            break
+        } else if err != nil {
+            return "", err
+        }
+    }
+
+    size, err := strconv.Atoi(string(number))
+    if err != nil {
+        return "", err
+    }
+
+    buff := make([]byte, size)
+    for i := range buff {
+        next, err := d.next()
+
+        buff[i] = next
+
+        if err != nil {
+            return "", err
+        }
+    }
+
+    return string(buff), nil
+}
+
+func (d *Decoder) decodeDict() (interface{}, error) {
     return nil, nil
 }
 
-func (d Decoder) decodeString(initial byte) (string, error) {
-    return "nil", nil
-}
-
 func Decode(reader io.Reader) (interface{}, error) {
-    decoder := Decoder{
+    decoder := &Decoder{
         reader,
         make([]byte, 1),
     }
