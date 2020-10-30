@@ -86,3 +86,25 @@ func main() {
 ```
 
 ## Dictionaries
+
+```go
+package main
+
+import (
+    "fmt"
+    "strings"
+    
+    "github.com/Zukkari/bencode"
+)
+
+func main() {
+    reader := strings.NewReader("d3:bar4:spam3:fooi42ee")
+    decoded, err := bencode.Decode(reader)
+
+    if err != nil {
+        fmt.Printf("Error when decoding input: %v\n", err)
+    }
+
+    fmt.Println(decoded) // "map[bar:spam foo:42]"
+}
+```

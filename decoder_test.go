@@ -42,3 +42,20 @@ func TestDecodeString(t *testing.T) {
         t.Errorf("Decoded input %v was incorrect, got %v and expected %v", input, decoded, input)
     }
 }
+
+func TestDecodeDict(t *testing.T) {
+    input := "d3:bar4:spam3:fooi42ee"
+
+    reader := strings.NewReader(input)
+    decoded, _ := Decode(reader)
+
+    decodedMap := decoded.(map[string]interface{})
+
+    if decodedMap["bar"] != "spam" {
+        t.Errorf("Decoded input %v was incorrect, got %v and expected %v", "bar", decoded, "spam")
+    }
+
+    if decodedMap["foo"] != 42 {
+        t.Errorf("Decoded input %v was incorrect, got %v and expected %v", "foo", decoded, 42)
+    }
+}

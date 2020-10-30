@@ -74,11 +74,11 @@ func (d *Decoder) decodeInt() (int, error) {
     intBuff := make([]byte, 64)
     offset := 0
 
-    for {
+    for i := range intBuff {
         next, err := d.next()
 
         if next != 'e' {
-            intBuff[offset] = next
+            intBuff[i] = next
             offset++
         } else {
             break
@@ -134,7 +134,32 @@ func (d *Decoder) decodeString(b byte) (string, error) {
 }
 
 func (d *Decoder) decodeDict() (interface{}, error) {
-    return nil, nil
+    dict := make(map[string]interface{})
+
+    for {
+        next, err := d.next()
+        if err != nil {
+            return nil, err
+        }
+
+        if next == 'e' {
+            break
+        }
+
+        key, err := d.decodeString(next)
+        if err != nil {
+            return nil, err
+        }
+
+        value, err := d.decode()
+        if err != nil {
+            return nil, err
+        }
+
+        dict[key] = value
+    }
+
+    return dict, nil
 }
 
 func Decode(reader io.Reader) (interface{}, error) {
