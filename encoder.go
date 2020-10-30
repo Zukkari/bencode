@@ -1,6 +1,9 @@
 package bencode
 
-import "fmt"
+import (
+	"fmt"
+	"sort"
+)
 
 type Encoder struct {
 	value interface{}
@@ -9,7 +12,7 @@ type Encoder struct {
 type UnsupportedType string
 
 func (e UnsupportedType) Error() string {
-	return fmt.Sprintf("Unsupported type: %v", e)
+	return fmt.Sprintf("Unsupported type: %v", string(e))
 }
 
 func (e *Encoder) encode() (string, error) {
@@ -53,7 +56,36 @@ func (e *Encoder) encodeString() string {
 }
 
 func (e *Encoder) encodeDict() (string, error) {
-	return "nil", nil
+	dict := e.value.(map[string]interface{})
+
+	keys := make([]string, 0, len(dict))
+	for k := range dict {
+		keys = append(keys, k)
+	}
+
+	sort.Strings(keys)
+
+	buff := make([]byte, 1)
+	buff[0] = 'd'
+
+	for _, k := range keys {
+		key, err := Encode(k)
+		if err != nil {
+			return "", err
+		}
+
+		buff = append(buff, []byte(key)...)
+
+		value, err := Encode(dict[k])
+		if err != nil {
+			return "", err
+		}
+
+		buff = append(buff, []byte(value)...)
+	}
+
+	buff = append(buff, 'e')
+	return string(buff), nil
 }
 
 func Encode(i interface{}) (string, error) {
